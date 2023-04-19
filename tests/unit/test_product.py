@@ -1,6 +1,7 @@
 from datetime import date, timedelta
-import pytest
-from allocation.domain.model import Product, OrderLine, Batch, OutOfStock
+from allocation.domain import events
+from allocation.domain.model import Product, OrderLine, Batch
+
 
 today = date.today()
 tomorrow = today + timedelta(days=1)
@@ -20,11 +21,11 @@ def test_prefers_warehouse_batches_to_shipments():
 
 
 def test_prefers_earlier_batches():
-    earliest = Batch("speedy-batch", "SEABREEZE", 100, eta=today)
-    medium = Batch("normal-batch", "SEABREEZE", 100, eta=tomorrow)
-    latest = Batch("slow-batch", "SEABREEZE", 100, eta=later)
-    product = Product(sku="SEABREEZE", batches=[medium, earliest, latest])
-    line = OrderLine("order1", "SEABREEZE", 10)
+    earliest = Batch("speedy-batch", "MINIMALIST-SPOON", 100, eta=today)
+    medium = Batch("normal-batch", "MINIMALIST-SPOON", 100, eta=tomorrow)
+    latest = Batch("slow-batch", "MINIMALIST-SPOON", 100, eta=later)
+    product = Product(sku="MINIMALIST-SPOON", batches=[medium, earliest, latest])
+    line = OrderLine("order1", "MINIMALIST-SPOON", 10)
 
     product.allocate(line)
 
@@ -34,27 +35,28 @@ def test_prefers_earlier_batches():
 
 
 def test_returns_allocated_batch_ref():
-    in_stock_batch = Batch("in-stock-batch-ref", "NIGHTCLUB", 100, eta=None)
-    shipment_batch = Batch("shipment-batch-ref", "NIGHTCLUB", 100, eta=tomorrow)
-    line = OrderLine("oref", "NIGHTCLUB", 10)
-    product = Product(sku="NIGHTCLUB", batches=[in_stock_batch, shipment_batch])
+    in_stock_batch = Batch("in-stock-batch-ref", "HIGHBROW-POSTER", 100, eta=None)
+    shipment_batch = Batch("shipment-batch-ref", "HIGHBROW-POSTER", 100, eta=tomorrow)
+    line = OrderLine("oref", "HIGHBROW-POSTER", 10)
+    product = Product(sku="HIGHBROW-POSTER", batches=[in_stock_batch, shipment_batch])
     allocation = product.allocate(line)
     assert allocation == in_stock_batch.reference
 
 
-def test_raises_out_of_stock_exception_if_cannot_allocate():
-    batch = Batch("batch1", "JUNGLE", 10, eta=today)
-    product = Product(sku="JUNGLE", batches=[batch])
-    product.allocate(OrderLine("order1", "JUNGLE", 10))
+def test_records_out_of_stock_event_if_cannot_allocate():
+    batch = Batch("batch1", "SMALL-FORK", 10, eta=today)
+    product = Product(sku="SMALL-FORK", batches=[batch])
+    product.allocate(OrderLine("order1", "SMALL-FORK", 10))
 
-    with pytest.raises(OutOfStock, match="JUNGLE"):
-        product.allocate(OrderLine("order2", "JUNGLE", 1))
+    allocation = product.allocate(OrderLine("order2", "SMALL-FORK", 1))
+    assert product.events[-1] == events.OutOfStock(sku="SMALL-FORK")
+    assert allocation is None
 
 
 def test_increments_version_number():
-    line = OrderLine("oref", "FOREST", 10)
+    line = OrderLine("oref", "SCANDI-PEN", 10)
     product = Product(
-        sku="FOREST", batches=[Batch("b1", "FOREST", 100, eta=None)]
+        sku="SCANDI-PEN", batches=[Batch("b1", "SCANDI-PEN", 100, eta=None)]
     )
     product.version_number = 7
     product.allocate(line)
